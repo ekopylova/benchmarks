@@ -149,6 +149,12 @@ def compute_accuracy(expected_alns, observed_alns, file_format="sam", offset=0):
             continue
         obs_contig = observed_alns[read_id][obs_contig_index]
         obs_pos = int(observed_alns[read_id][obs_pos_index])
+        if file_format == "blast":
+            # read mapped as reverse-complement
+            if (int(observed_alns[read_id][7]) - int(observed_alns[read_id][8]) > 0):
+                obs_strand = 16
+            else:
+                obs_strand = 0
         # compute the total number of unique bitscores in list of expected alignments
         unique_bitscores = set()
         for exp_aln in expected_alns[read_id]:
@@ -159,7 +165,10 @@ def compute_accuracy(expected_alns, observed_alns, file_format="sam", offset=0):
         weight = num_unique_bitscores
         for exp_aln in expected_alns[read_id]:
             exp_contig = exp_aln[0]
-            exp_pos = int(exp_aln[7])
+            if ((file_format == "blast") and (obs_strand == 16)):
+                exp_pos = int(exp_aln[8])
+            else:
+                exp_pos = int(exp_aln[7])
             # alignment found, compute accuracy score and go to next read
             if ((obs_contig == exp_contig) and (abs(obs_pos - exp_pos) <= offset)):
                 accuracy_score = float(weight/num_unique_bitscores)
@@ -204,11 +213,13 @@ def compute_precision(expected_alns, observed_alns):
                                 file_okay=True))
 @click.option('--tool', type=str, required=True,
               help='tool which generated observed_alns_fp')
+@click.option('--offset', type=int, required=False,
+              help='maximum absolute difference between expected and observed origin position')
 @click.option('--observed_aln_format', type=str, default='sam', show_default=True,
               required=False, help='file format of observed_alns_fp')
 @click.option('--total_reads', type=int, required=True,
               help='total number of sequences used in alignment for generating observed_alns_fp')
-def _main(expected_alns_fp, observed_alns_fp, tool, observed_aln_format, total_reads):
+def _main(expected_alns_fp, observed_alns_fp, tool, offset, observed_aln_format, total_reads):
     """
     """
     allowed_alignment_types = ["sam", "blast"]
@@ -217,7 +228,10 @@ def _main(expected_alns_fp, observed_alns_fp, tool, observed_aln_format, total_r
 
     expected_alns = collect_ground_truth(ground_truth_alns_fp=expected_alns_fp)
     observed_alns = collect_observed_alignments(observed_alns_fp=observed_alns_fp, file_format=observed_aln_format)
-    accuracy = compute_accuracy(expected_alns, observed_alns)
+    accuracy = compute_accuracy(expected_alns=expected_alns,
+                                observed_alns=observed_alns,
+                                file_format=observed_aln_format,
+                                offset=offset)
 
     tp, fp, fn, p, r, f = compute_precision(expected_alns, observed_alns)
 
